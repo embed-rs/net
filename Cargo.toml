@@ -1,0 +1,7 @@
+[package]
+authors = ["Philipp Oppermann <dev@phil-opp.com>"]
+name = "net"
+version = "0.1.0"
+
+[dependencies]
+byteorder = "1.0.0"
