@@ -1,8 +1,10 @@
 use {TxPacket, WriteOut, ip_checksum};
-use udp::UdpHeader;
+use udp::UdpPacket;
+use icmp::IcmpPacket;
 use core::convert::TryInto;
+use core::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Ipv4Address([u8; 4]);
 
 impl Ipv4Address {
@@ -10,8 +12,20 @@ impl Ipv4Address {
         Ipv4Address([a0, a1, a2, a3])
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let mut inner = [0; 4];
+        inner.copy_from_slice(bytes);
+        Ipv4Address(inner)
+    }
+
     pub fn as_bytes(&self) -> [u8; 4] {
         self.0
+    }
+}
+
+impl fmt::Debug for Ipv4Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}.{}.{}.{}", self.0[0], self.0[1], self.0[2], self.0[3])
     }
 }
 
@@ -24,6 +38,17 @@ pub enum IpProtocol {
 }
 
 impl IpProtocol {
+    pub fn from_number(number: u8) -> IpProtocol {
+        use self::IpProtocol::*;
+
+        match number {
+            1 => Icmp,
+            6 => Tcp,
+            17 => Udp,
+            number => Unknown(number),
+        }
+    }
+
     pub fn number(&self) -> u8 {
         use self::IpProtocol::*;
 
@@ -37,31 +62,51 @@ impl IpProtocol {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Ipv4Header<T> {
-    src_addr: Ipv4Address,
-    dst_addr: Ipv4Address,
+pub struct Ipv4Header {
+    pub src_addr: Ipv4Address,
+    pub dst_addr: Ipv4Address,
     protocol: IpProtocol,
-    payload: T,
 }
 
-impl<T> Ipv4Header<UdpHeader<T>> {
-    pub fn new(src_addr: Ipv4Address, dst_addr: Ipv4Address, udp: UdpHeader<T>) -> Self {
-        Ipv4Header {
-            src_addr: src_addr,
-            dst_addr: dst_addr,
-            protocol: IpProtocol::Udp,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ipv4Packet<T> {
+    pub header: Ipv4Header,
+    pub payload: T,
+}
+
+impl<T> Ipv4Packet<UdpPacket<T>> {
+    pub fn new_udp(src_addr: Ipv4Address, dst_addr: Ipv4Address, udp: UdpPacket<T>) -> Self {
+        Ipv4Packet {
+            header: Ipv4Header {
+                src_addr: src_addr,
+                dst_addr: dst_addr,
+                protocol: IpProtocol::Udp,
+            },
             payload: udp,
         }
     }
 }
 
-impl<T> Ipv4Header<T> {
+impl<T> Ipv4Packet<IcmpPacket<T>> {
+    pub fn new_icmp(src_addr: Ipv4Address, dst_addr: Ipv4Address, icmp: IcmpPacket<T>) -> Self {
+        Ipv4Packet {
+            header: Ipv4Header {
+                src_addr: src_addr,
+                dst_addr: dst_addr,
+                protocol: IpProtocol::Icmp,
+            },
+            payload: icmp,
+        }
+    }
+}
+
+impl<T> Ipv4Packet<T> {
     fn header_len(&self) -> u8 {
         20
     }
 }
 
-impl<T: WriteOut> Ipv4Header<T> {
+impl<T: WriteOut> Ipv4Packet<T> {
     fn write_out_impl(&self, packet: &mut TxPacket) -> Result<(), ()> {
         let start_index = packet.0.len();
 
@@ -74,11 +119,11 @@ impl<T: WriteOut> Ipv4Header<T> {
         packet.push_u16(1 << 14)?; // flags and fragment_offset (bit 14 == don't fragment)
 
         packet.push_byte(64)?; // time to live
-        packet.push_byte(self.protocol.number())?; // protocol
+        packet.push_byte(self.header.protocol.number())?; // protocol
         let checksum_idx = packet.push_u16(0)?; // checksum
 
-        packet.push_bytes(&self.src_addr.as_bytes())?;
-        packet.push_bytes(&self.dst_addr.as_bytes())?;
+        packet.push_bytes(&self.header.src_addr.as_bytes())?;
+        packet.push_bytes(&self.header.dst_addr.as_bytes())?;
 
         let end_index = packet.0.len();
 
@@ -90,7 +135,7 @@ impl<T: WriteOut> Ipv4Header<T> {
     }
 }
 
-impl<T: WriteOut> WriteOut for Ipv4Header<T> {
+impl<T: WriteOut> WriteOut for Ipv4Packet<T> {
     fn len(&self) -> usize {
         self.payload.len() + usize::from(self.header_len())
     }
@@ -101,7 +146,7 @@ impl<T: WriteOut> WriteOut for Ipv4Header<T> {
     }
 }
 
-impl<T: WriteOut> WriteOut for Ipv4Header<UdpHeader<T>> {
+impl<T: WriteOut> WriteOut for Ipv4Packet<UdpPacket<T>> {
     fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
         self.write_out_impl(packet)?;
 
@@ -109,9 +154,9 @@ impl<T: WriteOut> WriteOut for Ipv4Header<UdpHeader<T>> {
         self.payload.write_out(packet)?;
 
         // calculate udp checksum
-        let pseudo_header_checksum = !ip_checksum::pseudo_header(&self.src_addr,
-                                                                 &self.dst_addr,
-                                                                 self.protocol,
+        let pseudo_header_checksum = !ip_checksum::pseudo_header(&self.header.src_addr,
+                                                                 &self.header.dst_addr,
+                                                                 self.header.protocol,
                                                                  self.payload.len());
 
         let udp_checksum_idx = udp_start_index + 3 * 2;
@@ -124,14 +169,68 @@ impl<T: WriteOut> WriteOut for Ipv4Header<UdpHeader<T>> {
     }
 }
 
+use parse::{Parse, ParseError};
+use udp::UdpKind;
+
+impl<'a> Parse<'a> for Ipv4Packet<&'a [u8]> {
+    fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
+        Ok(Ipv4Packet {
+               header: Ipv4Header {
+                   src_addr: Ipv4Address::from_bytes(&data[12..16]),
+                   dst_addr: Ipv4Address::from_bytes(&data[16..20]),
+                   protocol: IpProtocol::from_number(data[9]),
+               },
+               payload: &data[20..],
+           })
+    }
+}
+
+#[derive(Debug)]
+pub enum Ipv4Kind<'a> {
+    Udp(UdpPacket<UdpKind<'a>>),
+    Icmp(IcmpPacket<&'a [u8]>),
+    Unknown(u8, &'a [u8]),
+}
+
+impl<'a> Parse<'a> for Ipv4Packet<Ipv4Kind<'a>> {
+    fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
+        let ip = Ipv4Packet::parse(data)?;
+        match ip.header.protocol {
+            IpProtocol::Udp => {
+                let udp = UdpPacket::parse(ip.payload)?;
+                Ok(Ipv4Packet {
+                       header: ip.header,
+                       payload: Ipv4Kind::Udp(udp),
+                   })
+            }
+            IpProtocol::Icmp => {
+                let icmp = IcmpPacket::parse(ip.payload)?;
+                Ok(Ipv4Packet {
+                    header: ip.header,
+                    payload: Ipv4Kind::Icmp(icmp),
+                })
+            }
+            IpProtocol::Unknown(number) => {
+                Ok(Ipv4Packet {
+                       header: ip.header,
+                       payload: Ipv4Kind::Unknown(number, ip.payload),
+                   })
+            }
+            _ => return Err(ParseError::Unimplemented("unimplemented ip protocol")),
+        }
+    }
+}
+
 #[test]
 fn checksum() {
     use test::{Empty, HexDumpPrint};
 
-    let ip = Ipv4Header {
-        src_addr: Ipv4Address::new(141, 52, 45, 122),
-        dst_addr: Ipv4Address::new(255, 255, 255, 255),
-        protocol: IpProtocol::Udp,
+    let ip = Ipv4Packet {
+        header: Ipv4Header {
+            src_addr: Ipv4Address::new(141, 52, 45, 122),
+            dst_addr: Ipv4Address::new(255, 255, 255, 255),
+            protocol: IpProtocol::Udp,
+        },
         payload: Empty,
     };
 
