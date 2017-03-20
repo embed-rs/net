@@ -18,6 +18,8 @@ mod core {
 
 use collections::vec::Vec;
 
+use alloc::boxed::Box;
+use collections::vec::Vec;
 use byteorder::{ByteOrder, NetworkEndian};
 
 pub mod ethernet;
@@ -33,6 +35,16 @@ pub struct TxPacket(Vec<u8>);
 impl TxPacket {
     pub fn new(max_len: usize) -> TxPacket {
         TxPacket(Vec::with_capacity(max_len))
+    }
+
+    pub fn write_out<T: WriteOut>(packet: ethernet::EthernetPacket<T>) -> Result<TxPacket, ()> {
+        let mut tx_packet = TxPacket::new(packet.len());
+        packet.write_out(&mut tx_packet)?;
+        Ok(tx_packet)
+    }
+
+    pub fn into_boxed_slice(self) -> Box<[u8]> {
+        self.0.into_boxed_slice()
     }
 
     pub fn push_bytes(&mut self, bytes: &[u8]) -> Result<usize, ()> {
