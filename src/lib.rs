@@ -23,6 +23,7 @@ use collections::vec::Vec;
 use byteorder::{ByteOrder, NetworkEndian};
 
 pub mod ethernet;
+pub mod arp;
 pub mod ipv4;
 pub mod udp;
 pub mod dhcp;
