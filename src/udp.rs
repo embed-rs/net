@@ -2,26 +2,34 @@ use core::convert::TryInto;
 
 use {TxPacket, WriteOut};
 use ip_checksum;
-use dhcp::DhcpHeader;
+use dhcp::DhcpPacket;
+use byteorder::{ByteOrder, NetworkEndian};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct UdpHeader<T> {
+pub struct UdpHeader {
     src_port: u16,
     dst_port: u16,
-    payload: T,
 }
 
-impl UdpHeader<DhcpHeader> {
-    pub fn new(dhcp: DhcpHeader) -> Self {
-        UdpHeader {
-            src_port: 68,
-            dst_port: 67,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UdpPacket<T> {
+    pub header: UdpHeader,
+    pub payload: T,
+}
+
+impl UdpPacket<DhcpPacket> {
+    pub fn new(dhcp: DhcpPacket) -> Self {
+        UdpPacket {
+            header: UdpHeader {
+                src_port: 68,
+                dst_port: 67,
+            },
             payload: dhcp,
         }
     }
 }
 
-impl<T: WriteOut> WriteOut for UdpHeader<T> {
+impl<T: WriteOut> WriteOut for UdpPacket<T> {
     fn len(&self) -> usize {
         self.payload.len() + 4 * 2
     }
@@ -29,8 +37,8 @@ impl<T: WriteOut> WriteOut for UdpHeader<T> {
     fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
         let start_index = packet.0.len();
 
-        packet.push_u16(self.src_port)?;
-        packet.push_u16(self.dst_port)?;
+        packet.push_u16(self.header.src_port)?;
+        packet.push_u16(self.header.dst_port)?;
         packet.push_u16(self.len().try_into().unwrap())?; // len
         let checksum_idx = packet.push_u16(0)?; // checksum
 
@@ -45,17 +53,59 @@ impl<T: WriteOut> WriteOut for UdpHeader<T> {
     }
 }
 
+use parse::{Parse, ParseError};
+
+impl<'a> Parse<'a> for UdpPacket<&'a [u8]> {
+    fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
+        Ok(UdpPacket {
+               header: UdpHeader {
+                   src_port: NetworkEndian::read_u16(&data[0..2]),
+                   dst_port: NetworkEndian::read_u16(&data[2..4]),
+               },
+               payload: &data[8..],
+           })
+    }
+}
+
+#[derive(Debug)]
+pub enum UdpKind<'a> {
+    Dhcp(DhcpPacket),
+    Unknown(&'a [u8]),
+}
+
+impl<'a> Parse<'a> for UdpPacket<UdpKind<'a>> {
+    fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
+        let udp = UdpPacket::parse(data)?;
+
+        let src_dst = (udp.header.src_port, udp.header.dst_port);
+        if src_dst == (67, 68) || src_dst == (68,67) {
+            let dhcp = DhcpPacket::parse(udp.payload)?;
+            Ok(UdpPacket {
+                   header: udp.header,
+                   payload: UdpKind::Dhcp(dhcp),
+               })
+        } else {
+            Ok(UdpPacket {
+                   header: udp.header,
+                   payload: UdpKind::Unknown(udp.payload),
+               })
+        }
+    }
+}
+
 #[test]
 fn checksum() {
-    use ipv4::{Ipv4Address, Ipv4Header};
+    use ipv4::{Ipv4Address, Ipv4Packet};
     use test::{Empty, HexDumpPrint};
 
-    let udp = UdpHeader {
-        src_port: 53,
-        dst_port: 57529,
+    let udp = UdpPacket {
+        header: UdpHeader {
+            src_port: 53,
+            dst_port: 57529,
+        },
         payload: Empty,
     };
-    let ip = Ipv4Header::new(Ipv4Address::new(141, 52, 46, 46),
+    let ip = Ipv4Packet::new_udp(Ipv4Address::new(141, 52, 46, 46),
                              Ipv4Address::new(141, 52, 46, 162),
                              udp);
 
