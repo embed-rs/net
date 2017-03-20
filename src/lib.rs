@@ -27,7 +27,7 @@ pub mod arp;
 pub mod ipv4;
 pub mod udp;
 pub mod dhcp;
-
+pub mod icmp;
 mod ip_checksum;
 mod test;
 mod parse;
