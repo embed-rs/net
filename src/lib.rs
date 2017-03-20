@@ -16,7 +16,7 @@ mod core {
     pub use std::*;
 }
 
-use collections::vec::Vec;
+pub use parse::{parse, ParseError};
 
 use alloc::boxed::Box;
 use collections::vec::Vec;
@@ -29,6 +29,7 @@ pub mod dhcp;
 
 mod ip_checksum;
 mod test;
+mod parse;
 
 pub struct TxPacket(Vec<u8>);
 
@@ -98,7 +99,6 @@ impl TxPacket {
         self.set_u16(index, value);
     }
 }
-
 
 pub trait WriteOut {
     fn len(&self) -> usize;
