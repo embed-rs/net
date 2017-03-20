@@ -1,9 +1,12 @@
+#![feature(alloc)]
 #![feature(collections)]
 #![feature(try_from)]
 #![feature(specialization)]
+#![feature(const_fn)]
 
 #![cfg_attr(not(test), no_std)]
 
+extern crate alloc;
 extern crate collections;
 
 extern crate byteorder;
