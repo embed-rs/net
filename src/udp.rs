@@ -34,8 +34,8 @@ impl<T: WriteOut> WriteOut for UdpPacket<T> {
         self.payload.len() + 4 * 2
     }
 
-    fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
-        let start_index = packet.0.len();
+    fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
+        let start_index = packet.len();
 
         packet.push_u16(self.header.src_port)?;
         packet.push_u16(self.header.dst_port)?;
@@ -43,10 +43,10 @@ impl<T: WriteOut> WriteOut for UdpPacket<T> {
         let checksum_idx = packet.push_u16(0)?; // checksum
 
         self.payload.write_out(packet)?;
-        let end_index = packet.0.len();
+        let end_index = packet.len();
 
         // calculate udp checksum (without pseudo header)
-        let checksum = !ip_checksum::data(&packet.0[start_index..end_index]);
+        let checksum = !ip_checksum::data(&packet[start_index..end_index]);
         packet.set_u16(checksum_idx, checksum);
 
         Ok(())
@@ -97,6 +97,7 @@ impl<'a> Parse<'a> for UdpPacket<UdpKind<'a>> {
 fn checksum() {
     use ipv4::{Ipv4Address, Ipv4Packet};
     use test::{Empty, HexDumpPrint};
+    use HeapTxPacket;
 
     let udp = UdpPacket {
         header: UdpHeader {
@@ -109,7 +110,7 @@ fn checksum() {
                              Ipv4Address::new(141, 52, 46, 162),
                              udp);
 
-    let mut packet = TxPacket::new(ip.len());
+    let mut packet = HeapTxPacket::new(ip.len());
     ip.write_out(&mut packet).unwrap();
 
     let data = packet.0.as_slice();

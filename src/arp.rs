@@ -53,7 +53,7 @@ impl WriteOut for ArpPacket {
         28
     }
 
-    fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
+    fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()> {
         packet.push_u16(1)?; // hardware type == ethernet (1)
         packet.push_u16(0x0800)?; // protocol type == ipv4 (0x0800)
         packet.push_byte(6)?; // hardware address size

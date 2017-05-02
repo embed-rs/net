@@ -63,7 +63,7 @@ impl WriteOut for DhcpPacket {
         }
     }
 
-    fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
+    fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()> {
         let operation = match self.operation {
             DhcpType::Discover |
             DhcpType::Request { .. } => 1,
@@ -187,13 +187,15 @@ impl<'a> Parse<'a> for DhcpPacket {
 
 #[test]
 fn test_discover() {
+    use HeapTxPacket;
+
     let discover = DhcpPacket {
         mac: EthernetAddress::new([0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef]),
         transaction_id: 0xcafebabe,
         operation: DhcpType::Discover,
     };
 
-    let mut packet = TxPacket::new(discover.len());
+    let mut packet = HeapTxPacket::new(discover.len());
     discover.write_out(&mut packet).unwrap();
 
     let data = packet.0.as_slice();
@@ -225,6 +227,8 @@ fn test_discover() {
 
 #[test]
 fn test_request() {
+    use HeapTxPacket;
+
     let request = DhcpPacket {
         mac: EthernetAddress::new([0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef]),
         transaction_id: 0xcafebabe,
@@ -234,7 +238,7 @@ fn test_request() {
         },
     };
 
-    let mut packet = TxPacket::new(request.len());
+    let mut packet = HeapTxPacket::new(request.len());
     request.write_out(&mut packet).unwrap();
 
     let data = packet.0.as_slice();
@@ -268,8 +272,10 @@ fn test_request() {
 
 #[test]
 fn test_discover_packet() {
+    use HeapTxPacket;
+
     let discover = new_discover_msg(EthernetAddress::new([0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef]));
-    let mut packet = TxPacket::new(discover.len());
+    let mut packet = HeapTxPacket::new(discover.len());
     discover.write_out(&mut packet).unwrap();
 
     let data = packet.0.as_slice();

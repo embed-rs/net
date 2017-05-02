@@ -18,6 +18,7 @@ mod core {
 
 pub use parse::{parse, ParseError};
 
+use core::ops::{Index, IndexMut, Range};
 use alloc::boxed::Box;
 use collections::vec::Vec;
 use byteorder::{ByteOrder, NetworkEndian};
@@ -32,15 +33,65 @@ mod ip_checksum;
 mod test;
 mod parse;
 
-pub struct TxPacket(Vec<u8>);
+pub trait TxPacket: Index<usize, Output=u8> + IndexMut<usize> + Index<Range<usize>, Output=[u8]> + IndexMut<Range<usize>> {
+    fn push_bytes(&mut self, bytes: &[u8]) -> Result<usize, ()>;
 
-impl TxPacket {
-    pub fn new(max_len: usize) -> TxPacket {
-        TxPacket(Vec::with_capacity(max_len))
+    fn len(&self) -> usize;
+
+    fn push_byte(&mut self, value: u8) -> Result<usize, ()> {
+        let bytes = [value];
+        self.push_bytes(&bytes)
     }
 
-    pub fn write_out<T: WriteOut>(packet: ethernet::EthernetPacket<T>) -> Result<TxPacket, ()> {
-        let mut tx_packet = TxPacket::new(packet.len());
+    fn push_u16(&mut self, value: u16) -> Result<usize, ()> {
+        let mut bytes = [0, 0];
+        NetworkEndian::write_u16(&mut bytes, value);
+        self.push_bytes(&bytes)
+    }
+
+    fn push_u32(&mut self, value: u32) -> Result<usize, ()> {
+        let mut bytes = [0, 0, 0, 0];
+        NetworkEndian::write_u32(&mut bytes, value);
+        self.push_bytes(&bytes)
+    }
+
+    fn get_bytes(&mut self, index: usize, len: usize) -> &[u8] {
+        &self[index..(index + len)]
+    }
+
+    fn set_bytes(&mut self, index: usize, bytes: &[u8]) {
+        self[index..(index + bytes.len())].copy_from_slice(bytes);
+    }
+
+    fn set_u16(&mut self, index: usize, value: u16) {
+        let mut bytes = [0, 0];
+        NetworkEndian::write_u16(&mut bytes, value);
+        self.set_bytes(index, &bytes);
+    }
+
+    fn update_u16<F>(&mut self, index: usize, f: F)
+        where F: FnOnce(u16) -> u16
+    {
+        let value = NetworkEndian::read_u16(self.get_bytes(index, 2));
+        let value = f(value);
+        self.set_u16(index, value);
+    }
+}
+
+pub trait WriteOut {
+    fn len(&self) -> usize;
+    fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()>;
+}
+
+pub struct HeapTxPacket(Vec<u8>);
+
+impl HeapTxPacket {
+     pub fn new(max_len: usize) -> HeapTxPacket {
+        HeapTxPacket(Vec::with_capacity(max_len))
+    }
+
+    pub fn write_out<T: WriteOut>(packet: ethernet::EthernetPacket<T>) -> Result<HeapTxPacket, ()> {
+        let mut tx_packet = HeapTxPacket::new(packet.len());
         packet.write_out(&mut tx_packet)?;
         Ok(tx_packet)
     }
@@ -48,8 +99,10 @@ impl TxPacket {
     pub fn into_boxed_slice(self) -> Box<[u8]> {
         self.0.into_boxed_slice()
     }
+}
 
-    pub fn push_bytes(&mut self, bytes: &[u8]) -> Result<usize, ()> {
+impl TxPacket for HeapTxPacket {
+    fn push_bytes(&mut self, bytes: &[u8]) -> Result<usize, ()> {
         if self.0.capacity() - self.0.len() < bytes.len() {
             Err(())
         } else {
@@ -61,47 +114,35 @@ impl TxPacket {
         }
     }
 
-    pub fn push_byte(&mut self, value: u8) -> Result<usize, ()> {
-        let bytes = [value];
-        self.push_bytes(&bytes)
-    }
-
-    pub fn push_u16(&mut self, value: u16) -> Result<usize, ()> {
-        let mut bytes = [0, 0];
-        NetworkEndian::write_u16(&mut bytes, value);
-        self.push_bytes(&bytes)
-    }
-
-    pub fn push_u32(&mut self, value: u32) -> Result<usize, ()> {
-        let mut bytes = [0, 0, 0, 0];
-        NetworkEndian::write_u32(&mut bytes, value);
-        self.push_bytes(&bytes)
-    }
-
-    pub fn get_bytes(&mut self, index: usize, len: usize) -> &[u8] {
-        &self.0[index..(index + len)]
-    }
-
-    pub fn set_bytes(&mut self, index: usize, bytes: &[u8]) {
-        self.0[index..(index + bytes.len())].copy_from_slice(bytes);
-    }
-
-    pub fn set_u16(&mut self, index: usize, value: u16) {
-        let mut bytes = [0, 0];
-        NetworkEndian::write_u16(&mut bytes, value);
-        self.set_bytes(index, &bytes);
-    }
-
-    pub fn update_u16<F>(&mut self, index: usize, f: F)
-        where F: FnOnce(u16) -> u16
-    {
-        let value = NetworkEndian::read_u16(self.get_bytes(index, 2));
-        let value = f(value);
-        self.set_u16(index, value);
+    fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
-pub trait WriteOut {
-    fn len(&self) -> usize;
-    fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()>;
+impl Index<usize> for HeapTxPacket {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &u8 {
+        self.0.index(index)
+    }
+}
+
+impl IndexMut<usize> for HeapTxPacket {
+    fn index_mut(&mut self, index: usize) -> &mut u8 {
+        self.0.index_mut(index)
+    }
+}
+
+impl Index<Range<usize>> for HeapTxPacket {
+    type Output = [u8];
+
+    fn index(&self, index: Range<usize>) -> &[u8] {
+        self.0.index(index)
+    }
+}
+
+impl IndexMut<Range<usize>> for HeapTxPacket {
+    fn index_mut(&mut self, index: Range<usize>) -> &mut [u8] {
+        self.0.index_mut(index)
+    }
 }

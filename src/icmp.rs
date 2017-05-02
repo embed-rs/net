@@ -47,8 +47,8 @@ impl<T: AsRef<[u8]>> WriteOut for IcmpPacket<T> {
         self.data.as_ref().len() + 4*2
     }
 
-    fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
-        let start_index = packet.0.len();
+    fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
+        let start_index = packet.len();
 
         match self.type_ {
             IcmpType::EchoRequest {..} => {
@@ -71,10 +71,10 @@ impl<T: AsRef<[u8]>> WriteOut for IcmpPacket<T> {
         }
 
         packet.push_bytes(self.data.as_ref())?;
-        let end_index = packet.0.len();
+        let end_index = packet.len();
 
         // calculate Icmp checksum
-        let checksum = !ip_checksum::data(&packet.0[start_index..end_index]);
+        let checksum = !ip_checksum::data(&packet[start_index..end_index]);
         packet.set_u16(checksum_idx, checksum);
 
         Ok(())

@@ -9,7 +9,7 @@ impl WriteOut for Empty {
         0
     }
 
-    fn write_out(&self, _: &mut TxPacket) -> Result<(), ()> {
+    fn write_out<T: TxPacket>(&self, _: &mut T) -> Result<(), ()> {
         Ok(())
     }
 }

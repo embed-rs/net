@@ -107,8 +107,8 @@ impl<T> Ipv4Packet<T> {
 }
 
 impl<T: WriteOut> Ipv4Packet<T> {
-    fn write_out_impl(&self, packet: &mut TxPacket) -> Result<(), ()> {
-        let start_index = packet.0.len();
+    fn write_out_impl<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
+        let start_index = packet.len();
 
         packet.push_byte(4 << 4 | self.header_len() / 4)?; // version and header_len
         packet.push_byte(0)?; // dscp_ecn
@@ -125,10 +125,10 @@ impl<T: WriteOut> Ipv4Packet<T> {
         packet.push_bytes(&self.header.src_addr.as_bytes())?;
         packet.push_bytes(&self.header.dst_addr.as_bytes())?;
 
-        let end_index = packet.0.len();
+        let end_index = packet.len();
 
         // calculate ip checksum
-        let checksum = !ip_checksum::data(&packet.0[start_index..end_index]);
+        let checksum = !ip_checksum::data(&packet[start_index..end_index]);
         packet.set_u16(checksum_idx, checksum);
 
         Ok(())
@@ -140,17 +140,17 @@ impl<T: WriteOut> WriteOut for Ipv4Packet<T> {
         self.payload.len() + usize::from(self.header_len())
     }
 
-    default fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
+    default fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
         self.write_out_impl(packet)?;
         self.payload.write_out(packet)
     }
 }
 
 impl<T: WriteOut> WriteOut for Ipv4Packet<UdpPacket<T>> {
-    fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
+    fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
         self.write_out_impl(packet)?;
 
-        let udp_start_index = packet.0.len();
+        let udp_start_index = packet.len();
         self.payload.write_out(packet)?;
 
         // calculate udp checksum
@@ -224,6 +224,7 @@ impl<'a> Parse<'a> for Ipv4Packet<Ipv4Kind<'a>> {
 #[test]
 fn checksum() {
     use test::{Empty, HexDumpPrint};
+    use HeapTxPacket;
 
     let ip = Ipv4Packet {
         header: Ipv4Header {
@@ -234,7 +235,7 @@ fn checksum() {
         payload: Empty,
     };
 
-    let mut packet = TxPacket::new(ip.len());
+    let mut packet = HeapTxPacket::new(ip.len());
     ip.write_out(&mut packet).unwrap();
 
 

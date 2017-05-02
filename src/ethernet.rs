@@ -119,7 +119,7 @@ impl<T: WriteOut> WriteOut for EthernetPacket<T> {
         self.payload.len() + 2 * 6 + 2
     }
 
-    fn write_out(&self, packet: &mut TxPacket) -> Result<(), ()> {
+    fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
         packet.push_bytes(&self.header.dst_addr.as_bytes())?;
         packet.push_bytes(&self.header.src_addr.as_bytes())?;
         packet.push_u16(self.header.ether_type.number())?;
