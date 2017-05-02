@@ -11,21 +11,24 @@ pub fn new_discover_msg(mac: EthernetAddress) -> EthernetPacket<Ipv4Packet<UdpPa
     };
     let udp = UdpPacket::new(dhcp_discover);
     let ip = Ipv4Packet::new_udp(Ipv4Address::new(0, 0, 0, 0),
-                             Ipv4Address::new(255, 255, 255, 255),
-                             udp);
+                                 Ipv4Address::new(255, 255, 255, 255),
+                                 udp);
     EthernetPacket::new_ipv4(mac, EthernetAddress::new([0xff; 6]), ip)
 }
 
-pub fn new_request_msg(mac: EthernetAddress, ip: Ipv4Address, dhcp_server_ip: Ipv4Address) -> EthernetPacket<Ipv4Packet<UdpPacket<DhcpPacket>>> {
+pub fn new_request_msg(mac: EthernetAddress,
+                       ip: Ipv4Address,
+                       dhcp_server_ip: Ipv4Address)
+                       -> EthernetPacket<Ipv4Packet<UdpPacket<DhcpPacket>>> {
     let dhcp_request = DhcpPacket {
         mac: mac,
         transaction_id: 0x12345678,
-        operation: DhcpType::Request{ip, dhcp_server_ip},
+        operation: DhcpType::Request { ip, dhcp_server_ip },
     };
     let udp = UdpPacket::new(dhcp_request);
     let ip = Ipv4Packet::new_udp(Ipv4Address::new(0, 0, 0, 0),
-                             Ipv4Address::new(255, 255, 255, 255),
-                             udp);
+                                 Ipv4Address::new(255, 255, 255, 255),
+                                 udp);
     EthernetPacket::new_ipv4(mac, EthernetAddress::new([0xff; 6]), ip)
 }
 
@@ -47,9 +50,7 @@ pub enum DhcpType {
         ip: Ipv4Address,
         dhcp_server_ip: Ipv4Address,
     },
-    Ack {
-        ip: Ipv4Address,
-    },
+    Ack { ip: Ipv4Address },
 }
 
 impl WriteOut for DhcpPacket {
@@ -58,8 +59,8 @@ impl WriteOut for DhcpPacket {
         match self.operation {
             DhcpType::Discover => 10,
             DhcpType::Request { .. } => 16,
-            DhcpType::Offer {..} => unimplemented!(),
-            DhcpType::Ack {..} => unimplemented!(),
+            DhcpType::Offer { .. } => unimplemented!(),
+            DhcpType::Ack { .. } => unimplemented!(),
         }
     }
 
@@ -67,7 +68,8 @@ impl WriteOut for DhcpPacket {
         let operation = match self.operation {
             DhcpType::Discover |
             DhcpType::Request { .. } => 1,
-            DhcpType::Offer {..} | DhcpType::Ack {..} => 2,
+            DhcpType::Offer { .. } |
+            DhcpType::Ack { .. } => 2,
         };
 
         packet.push_byte(operation)?;
@@ -129,7 +131,8 @@ impl WriteOut for DhcpPacket {
 
                 packet.push_byte(255)?; // option end
             }
-            DhcpType::Offer {..} | DhcpType::Ack {..} => unimplemented!(),
+            DhcpType::Offer { .. } |
+            DhcpType::Ack { .. } => unimplemented!(),
         }
 
         Ok(())
@@ -149,39 +152,39 @@ impl<'a> Parse<'a> for DhcpPacket {
                 if code == 53 && len == 1 {
                     return data[2];
                 } else {
-                    data = &data[(2+usize::from(len))..];
+                    data = &data[(2 + usize::from(len))..];
                 }
             }
         }
 
         let operation = match parse_message_type_tag(&data[240..]) {
-                1 => {
-                    // discover
-                    return Err(ParseError::Unimplemented("dhcp discover"));
-                },
-                2 => {
-                    // offer
-                    let ip = Ipv4Address::from_bytes(&data[16..20]);
-                    let dhcp_server_ip = Ipv4Address::from_bytes(&data[20..24]);
-                    DhcpType::Offer{ip, dhcp_server_ip}
-                },
-                3 => {
-                    // request
-                    return Err(ParseError::Unimplemented("dhcp request"));
-                },
-                5 => {
-                    // ack
-                    let ip = Ipv4Address::from_bytes(&data[16..20]);
-                    DhcpType::Ack { ip }
-                },
-                _ => return Err(ParseError::Unimplemented("unknown dhcp message type"))
-            };
+            1 => {
+                // discover
+                return Err(ParseError::Unimplemented("dhcp discover"));
+            }
+            2 => {
+                // offer
+                let ip = Ipv4Address::from_bytes(&data[16..20]);
+                let dhcp_server_ip = Ipv4Address::from_bytes(&data[20..24]);
+                DhcpType::Offer { ip, dhcp_server_ip }
+            }
+            3 => {
+                // request
+                return Err(ParseError::Unimplemented("dhcp request"));
+            }
+            5 => {
+                // ack
+                let ip = Ipv4Address::from_bytes(&data[16..20]);
+                DhcpType::Ack { ip }
+            }
+            _ => return Err(ParseError::Unimplemented("unknown dhcp message type")),
+        };
 
-        Ok(DhcpPacket{
-            mac: EthernetAddress::from_bytes(&data[28..34]),
-            transaction_id: NetworkEndian::read_u32(&data[4..8]),
-            operation: operation,
-        })
+        Ok(DhcpPacket {
+               mac: EthernetAddress::from_bytes(&data[28..34]),
+               transaction_id: NetworkEndian::read_u32(&data[4..8]),
+               operation: operation,
+           })
     }
 }
 

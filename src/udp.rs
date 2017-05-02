@@ -78,7 +78,7 @@ impl<'a> Parse<'a> for UdpPacket<UdpKind<'a>> {
         let udp = UdpPacket::parse(data)?;
 
         let src_dst = (udp.header.src_port, udp.header.dst_port);
-        if src_dst == (67, 68) || src_dst == (68,67) {
+        if src_dst == (67, 68) || src_dst == (68, 67) {
             let dhcp = DhcpPacket::parse(udp.payload)?;
             Ok(UdpPacket {
                    header: udp.header,
@@ -107,8 +107,8 @@ fn checksum() {
         payload: Empty,
     };
     let ip = Ipv4Packet::new_udp(Ipv4Address::new(141, 52, 46, 46),
-                             Ipv4Address::new(141, 52, 46, 162),
-                             udp);
+                                 Ipv4Address::new(141, 52, 46, 162),
+                                 udp);
 
     let mut packet = HeapTxPacket::new(ip.len());
     ip.write_out(&mut packet).unwrap();

@@ -45,5 +45,7 @@ pub fn pseudo_header(src_addr: &Ipv4Address,
     proto_len[1] = protocol.number();
     NetworkEndian::write_u16(&mut proto_len[2..4], length as u16);
 
-    combine(&[data(&src_addr.as_bytes()), data(&dst_addr.as_bytes()), data(&proto_len[..])])
+    combine(&[data(&src_addr.as_bytes()),
+              data(&dst_addr.as_bytes()),
+              data(&proto_len[..])])
 }

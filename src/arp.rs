@@ -14,9 +14,10 @@ pub struct ArpPacket {
 
 impl ArpPacket {
     pub fn response(&self, mac: EthernetAddress) -> ArpPacket {
-        assert!(self.operation == ArpOperation::Request, "can only generate response for request");
+        assert!(self.operation == ArpOperation::Request,
+                "can only generate response for request");
 
-         ArpPacket {
+        ArpPacket {
             operation: ArpOperation::Response,
             src_mac: mac,
             dst_mac: self.src_mac,
@@ -31,7 +32,10 @@ impl ArpPacket {
     }
 }
 
-pub fn new_request_packet(src_mac: EthernetAddress, src_ip: Ipv4Address, dst_ip: Ipv4Address) -> EthernetPacket<ArpPacket> {
+pub fn new_request_packet(src_mac: EthernetAddress,
+                          src_ip: Ipv4Address,
+                          dst_ip: Ipv4Address)
+                          -> EthernetPacket<ArpPacket> {
     let arp = ArpPacket {
         operation: ArpOperation::Request,
         src_mac: src_mac,
@@ -58,11 +62,12 @@ impl WriteOut for ArpPacket {
         packet.push_u16(0x0800)?; // protocol type == ipv4 (0x0800)
         packet.push_byte(6)?; // hardware address size
         packet.push_byte(4)?; // protocol address size
-        
-        packet.push_u16(match self.operation {
-            ArpOperation::Request => 1,
-            ArpOperation::Response => 2,
-        })?;
+
+        packet
+            .push_u16(match self.operation {
+                          ArpOperation::Request => 1,
+                          ArpOperation::Response => 2,
+                      })?;
 
         packet.push_bytes(&self.src_mac.as_bytes())?;
         packet.push_bytes(&self.src_ip.as_bytes())?;

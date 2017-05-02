@@ -29,7 +29,14 @@ impl EthernetAddress {
 
 impl fmt::Debug for EthernetAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}", self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5])
+        write!(f,
+               "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+               self.0[0],
+               self.0[1],
+               self.0[2],
+               self.0[3],
+               self.0[4],
+               self.0[5])
     }
 }
 
@@ -81,9 +88,9 @@ impl<T> EthernetPacket<Ipv4Packet<T>> {
 
 impl EthernetPacket<ArpPacket> {
     pub fn new_arp(src_addr: EthernetAddress,
-                    dst_addr: EthernetAddress,
-                    arp_data: ArpPacket)
-                    -> Self {
+                   dst_addr: EthernetAddress,
+                   arp_data: ArpPacket)
+                   -> Self {
         EthernetPacket {
             header: EthernetHeader {
                 src_addr: src_addr,
@@ -174,9 +181,9 @@ impl<'a> Parse<'a> for EthernetPacket<EthernetKind<'a>> {
             EtherType::Arp => {
                 let arp = ArpPacket::parse(ethernet.payload)?;
                 Ok(EthernetPacket {
-                    header: ethernet.header,
-                    payload: EthernetKind::Arp(arp),
-                })
+                       header: ethernet.header,
+                       payload: EthernetKind::Arp(arp),
+                   })
             }
             EtherType::Unknown(_) => Err(ParseError::Unimplemented("only ipv4 parsing is supported at the moment")),
         }

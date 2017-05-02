@@ -206,9 +206,9 @@ impl<'a> Parse<'a> for Ipv4Packet<Ipv4Kind<'a>> {
             IpProtocol::Icmp => {
                 let icmp = IcmpPacket::parse(ip.payload)?;
                 Ok(Ipv4Packet {
-                    header: ip.header,
-                    payload: Ipv4Kind::Icmp(icmp),
-                })
+                       header: ip.header,
+                       payload: Ipv4Kind::Icmp(icmp),
+                   })
             }
             IpProtocol::Unknown(number) => {
                 Ok(Ipv4Packet {

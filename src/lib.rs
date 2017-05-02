@@ -33,7 +33,9 @@ mod ip_checksum;
 mod test;
 mod parse;
 
-pub trait TxPacket: Index<usize, Output=u8> + IndexMut<usize> + Index<Range<usize>, Output=[u8]> + IndexMut<Range<usize>> {
+pub trait TxPacket: Index<usize, Output=u8> + IndexMut<usize> + Index<Range<usize>, Output=[u8]>
+    + IndexMut<Range<usize>>
+{
     fn push_bytes(&mut self, bytes: &[u8]) -> Result<usize, ()>;
 
     fn len(&self) -> usize;
@@ -86,7 +88,7 @@ pub trait WriteOut {
 pub struct HeapTxPacket(Vec<u8>);
 
 impl HeapTxPacket {
-     pub fn new(max_len: usize) -> HeapTxPacket {
+    pub fn new(max_len: usize) -> HeapTxPacket {
         HeapTxPacket(Vec::with_capacity(max_len))
     }
 
