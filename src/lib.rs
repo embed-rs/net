@@ -1,12 +1,11 @@
-#![feature(alloc)]
-#![feature(collections)]
 #![feature(try_from)]
 #![feature(specialization)]
 #![feature(const_fn)]
 
 #![cfg_attr(not(test), no_std)]
+#![cfg_attr(any(test, feature = "alloc"), feature(collections))]
 
-extern crate alloc;
+#[cfg(any(test, feature = "alloc"))]
 extern crate collections;
 
 extern crate byteorder;
@@ -17,10 +16,10 @@ mod core {
 }
 
 pub use parse::{parse, ParseError};
+#[cfg(any(test, feature = "alloc"))]
+pub use heap_tx_packet::HeapTxPacket;
 
 use core::ops::{Index, IndexMut, Range};
-use alloc::boxed::Box;
-use collections::vec::Vec;
 use byteorder::{ByteOrder, NetworkEndian};
 
 pub mod ethernet;
@@ -85,66 +84,83 @@ pub trait WriteOut {
     fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()>;
 }
 
-pub struct HeapTxPacket(Vec<u8>);
+#[cfg(any(test, feature = "alloc"))]
+mod heap_tx_packet {
+    use core::ops::{Deref, Index, IndexMut, Range};
+    use collections::boxed::Box;
+    use collections::vec::Vec;
+    use ethernet::EthernetPacket;
+    use {WriteOut, TxPacket};
 
-impl HeapTxPacket {
-    pub fn new(max_len: usize) -> HeapTxPacket {
-        HeapTxPacket(Vec::with_capacity(max_len))
-    }
+    pub struct HeapTxPacket(Vec<u8>);
 
-    pub fn write_out<T: WriteOut>(packet: ethernet::EthernetPacket<T>) -> Result<HeapTxPacket, ()> {
-        let mut tx_packet = HeapTxPacket::new(packet.len());
-        packet.write_out(&mut tx_packet)?;
-        Ok(tx_packet)
-    }
+    impl HeapTxPacket {
+        pub fn new(max_len: usize) -> HeapTxPacket {
+            HeapTxPacket(Vec::with_capacity(max_len))
+        }
 
-    pub fn into_boxed_slice(self) -> Box<[u8]> {
-        self.0.into_boxed_slice()
-    }
-}
+        pub fn write_out<T: WriteOut>(packet: EthernetPacket<T>) -> Result<HeapTxPacket, ()> {
+            let mut tx_packet = HeapTxPacket::new(packet.len());
+            packet.write_out(&mut tx_packet)?;
+            Ok(tx_packet)
+        }
 
-impl TxPacket for HeapTxPacket {
-    fn push_bytes(&mut self, bytes: &[u8]) -> Result<usize, ()> {
-        if self.0.capacity() - self.0.len() < bytes.len() {
-            Err(())
-        } else {
-            let index = self.0.len();
-            for &byte in bytes {
-                self.0.push(byte);
-            }
-            Ok(index)
+        pub fn into_boxed_slice(self) -> Box<[u8]> {
+            self.0.into_boxed_slice()
         }
     }
 
-    fn len(&self) -> usize {
-        self.0.len()
+    impl TxPacket for HeapTxPacket {
+        fn push_bytes(&mut self, bytes: &[u8]) -> Result<usize, ()> {
+            if self.0.capacity() - self.0.len() < bytes.len() {
+                Err(())
+            } else {
+                let index = self.0.len();
+                for &byte in bytes {
+                    self.0.push(byte);
+                }
+                Ok(index)
+            }
+        }
+
+        fn len(&self) -> usize {
+            self.0.len()
+        }
     }
-}
 
-impl Index<usize> for HeapTxPacket {
-    type Output = u8;
+    impl Deref for HeapTxPacket {
+        type Target = Vec<u8>;
 
-    fn index(&self, index: usize) -> &u8 {
-        self.0.index(index)
+        fn deref(&self) -> &Vec<u8> {
+            &self.0
+        }
     }
-}
 
-impl IndexMut<usize> for HeapTxPacket {
-    fn index_mut(&mut self, index: usize) -> &mut u8 {
-        self.0.index_mut(index)
+    impl Index<usize> for HeapTxPacket {
+        type Output = u8;
+
+        fn index(&self, index: usize) -> &u8 {
+            self.0.index(index)
+        }
     }
-}
 
-impl Index<Range<usize>> for HeapTxPacket {
-    type Output = [u8];
-
-    fn index(&self, index: Range<usize>) -> &[u8] {
-        self.0.index(index)
+    impl IndexMut<usize> for HeapTxPacket {
+        fn index_mut(&mut self, index: usize) -> &mut u8 {
+            self.0.index_mut(index)
+        }
     }
-}
 
-impl IndexMut<Range<usize>> for HeapTxPacket {
-    fn index_mut(&mut self, index: Range<usize>) -> &mut [u8] {
-        self.0.index_mut(index)
+    impl Index<Range<usize>> for HeapTxPacket {
+        type Output = [u8];
+
+        fn index(&self, index: Range<usize>) -> &[u8] {
+            self.0.index(index)
+        }
+    }
+
+    impl IndexMut<Range<usize>> for HeapTxPacket {
+        fn index_mut(&mut self, index: Range<usize>) -> &mut [u8] {
+            self.0.index_mut(index)
+        }
     }
 }
