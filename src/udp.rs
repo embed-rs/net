@@ -7,8 +7,8 @@ use byteorder::{ByteOrder, NetworkEndian};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UdpHeader {
-    src_port: u16,
-    dst_port: u16,
+    pub src_port: u16,
+    pub dst_port: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
