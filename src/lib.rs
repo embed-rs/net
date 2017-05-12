@@ -20,6 +20,7 @@ pub use parse::{parse, ParseError};
 pub use heap_tx_packet::HeapTxPacket;
 
 use core::ops::{Index, IndexMut, Range};
+use collections::borrow::Cow;
 use byteorder::{ByteOrder, NetworkEndian};
 
 pub mod ethernet;
@@ -82,6 +83,26 @@ pub trait TxPacket: Index<usize, Output=u8> + IndexMut<usize> + Index<Range<usiz
 pub trait WriteOut {
     fn len(&self) -> usize;
     fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()>;
+}
+
+impl<'a> WriteOut for &'a [u8] {
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+
+    fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()> {
+        packet.push_bytes(self).map(|_| ())
+    }
+}
+
+impl<'a> WriteOut for Cow<'a, [u8]> {
+    fn len(&self) -> usize {
+        (**self).len()
+    }
+
+    fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()> {
+        packet.push_bytes(self).map(|_| ())
+    }
 }
 
 #[cfg(any(test, feature = "alloc"))]
