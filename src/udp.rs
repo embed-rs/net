@@ -17,15 +17,9 @@ pub struct UdpPacket<T> {
     pub payload: T,
 }
 
-impl UdpPacket<DhcpPacket> {
-    pub fn new(dhcp: DhcpPacket) -> Self {
-        UdpPacket {
-            header: UdpHeader {
-                src_port: 68,
-                dst_port: 67,
-            },
-            payload: dhcp,
-        }
+impl<T> UdpPacket<T> {
+    pub fn new(src_port: u16, dst_port: u16, payload: T) -> Self {
+        UdpPacket { header: UdpHeader {src_port, dst_port}, payload }
     }
 }
 

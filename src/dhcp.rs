@@ -9,7 +9,7 @@ pub fn new_discover_msg(mac: EthernetAddress) -> EthernetPacket<Ipv4Packet<UdpPa
         transaction_id: 0x12345678,
         operation: DhcpType::Discover,
     };
-    let udp = UdpPacket::new(dhcp_discover);
+    let udp = UdpPacket::new(68, 67, dhcp_discover);
     let ip = Ipv4Packet::new_udp(Ipv4Address::new(0, 0, 0, 0),
                                  Ipv4Address::new(255, 255, 255, 255),
                                  udp);
@@ -25,7 +25,7 @@ pub fn new_request_msg(mac: EthernetAddress,
         transaction_id: 0x12345678,
         operation: DhcpType::Request { ip, dhcp_server_ip },
     };
-    let udp = UdpPacket::new(dhcp_request);
+    let udp = UdpPacket::new(68, 67, dhcp_request);
     let ip = Ipv4Packet::new_udp(Ipv4Address::new(0, 0, 0, 0),
                                  Ipv4Address::new(255, 255, 255, 255),
                                  udp);
