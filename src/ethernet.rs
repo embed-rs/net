@@ -185,7 +185,9 @@ impl<'a> Parse<'a> for EthernetPacket<EthernetKind<'a>> {
                        payload: EthernetKind::Arp(arp),
                    })
             }
-            EtherType::Unknown(_) => Err(ParseError::Unimplemented("only ipv4 parsing is supported at the moment")),
+            EtherType::Unknown(_) => {
+                Err(ParseError::Unimplemented("only ipv4 parsing is supported at the moment"))
+            }
         }
     }
 }

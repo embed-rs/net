@@ -36,7 +36,10 @@ pub struct UdpPacket<T> {
 
 impl<T> UdpPacket<T> {
     pub fn new(src_port: u16, dst_port: u16, payload: T) -> Self {
-        UdpPacket { header: UdpHeader {src_port, dst_port}, payload }
+        UdpPacket {
+            header: UdpHeader { src_port, dst_port },
+            payload,
+        }
     }
 }
 
