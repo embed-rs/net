@@ -4,6 +4,23 @@ use {TxPacket, WriteOut};
 use ip_checksum;
 use dhcp::DhcpPacket;
 use byteorder::{ByteOrder, NetworkEndian};
+use ethernet::{EthernetPacket, EthernetAddress};
+use ipv4::{Ipv4Packet, Ipv4Address};
+
+pub fn new_udp_packet<T>(src_mac: EthernetAddress,
+                         dst_mac: EthernetAddress,
+                         src_ip: Ipv4Address,
+                         dst_ip: Ipv4Address,
+                         src_port: u16,
+                         dst_port: u16,
+                         payload: T)
+                         -> EthernetPacket<Ipv4Packet<UdpPacket<T>>> {
+    EthernetPacket::new_ipv4(src_mac,
+                             dst_mac,
+                             Ipv4Packet::new_udp(src_ip,
+                                                 dst_ip,
+                                                 UdpPacket::new(src_port, dst_port, payload)))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UdpHeader {
