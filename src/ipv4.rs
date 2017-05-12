@@ -174,13 +174,16 @@ use udp::UdpKind;
 
 impl<'a> Parse<'a> for Ipv4Packet<&'a [u8]> {
     fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
+        use byteorder::{ByteOrder, NetworkEndian};
+
+        let total_len = NetworkEndian::read_u16(&data[2..4]);
         Ok(Ipv4Packet {
                header: Ipv4Header {
                    src_addr: Ipv4Address::from_bytes(&data[12..16]),
                    dst_addr: Ipv4Address::from_bytes(&data[16..20]),
                    protocol: IpProtocol::from_number(data[9]),
                },
-               payload: &data[20..],
+               payload: &data[20..total_len as usize],
            })
     }
 }
