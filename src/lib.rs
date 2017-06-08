@@ -9,6 +9,7 @@
 extern crate alloc;
 
 extern crate byteorder;
+extern crate bit_field;
 
 #[cfg(test)]
 mod core {
@@ -27,6 +28,7 @@ pub mod ethernet;
 pub mod arp;
 pub mod ipv4;
 pub mod udp;
+pub mod tcp;
 pub mod dhcp;
 pub mod icmp;
 mod ip_checksum;

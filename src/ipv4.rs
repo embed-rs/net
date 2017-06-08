@@ -1,5 +1,6 @@
 use {TxPacket, WriteOut, ip_checksum};
 use udp::UdpPacket;
+use tcp::TcpPacket;
 use icmp::IcmpPacket;
 use core::convert::TryInto;
 use core::fmt;
@@ -83,6 +84,19 @@ impl<T> Ipv4Packet<UdpPacket<T>> {
                 protocol: IpProtocol::Udp,
             },
             payload: udp,
+        }
+    }
+}
+
+impl<T> Ipv4Packet<TcpPacket<T>> {
+    pub fn new_tcp(src_addr: Ipv4Address, dst_addr: Ipv4Address, tcp: TcpPacket<T>) -> Self {
+        Ipv4Packet {
+            header: Ipv4Header {
+                src_addr: src_addr,
+                dst_addr: dst_addr,
+                protocol: IpProtocol::Tcp,
+            },
+            payload: tcp,
         }
     }
 }
@@ -171,6 +185,7 @@ impl<T: WriteOut> WriteOut for Ipv4Packet<UdpPacket<T>> {
 
 use parse::{Parse, ParseError};
 use udp::UdpKind;
+use tcp::TcpKind;
 
 impl<'a> Parse<'a> for Ipv4Packet<&'a [u8]> {
     fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
@@ -191,6 +206,7 @@ impl<'a> Parse<'a> for Ipv4Packet<&'a [u8]> {
 #[derive(Debug)]
 pub enum Ipv4Kind<'a> {
     Udp(UdpPacket<UdpKind<'a>>),
+    Tcp(TcpPacket<TcpKind<'a>>),
     Icmp(IcmpPacket<&'a [u8]>),
     Unknown(u8, &'a [u8]),
 }
@@ -206,6 +222,13 @@ impl<'a> Parse<'a> for Ipv4Packet<Ipv4Kind<'a>> {
                        payload: Ipv4Kind::Udp(udp),
                    })
             }
+            IpProtocol::Tcp => {
+                let tcp = TcpPacket::parse(ip.payload)?;
+                Ok(Ipv4Packet {
+                       header: ip.header,
+                       payload: Ipv4Kind::Tcp(tcp),
+                   })
+            }
             IpProtocol::Icmp => {
                 let icmp = IcmpPacket::parse(ip.payload)?;
                 Ok(Ipv4Packet {
@@ -219,7 +242,6 @@ impl<'a> Parse<'a> for Ipv4Packet<Ipv4Kind<'a>> {
                        payload: Ipv4Kind::Unknown(number, ip.payload),
                    })
             }
-            _ => return Err(ParseError::Unimplemented("unimplemented ip protocol")),
         }
     }
 }
