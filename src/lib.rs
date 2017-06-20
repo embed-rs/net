@@ -3,10 +3,10 @@
 #![feature(const_fn)]
 
 #![cfg_attr(not(test), no_std)]
-#![cfg_attr(any(test, feature = "alloc"), feature(collections))]
+#![cfg_attr(any(test, feature = "alloc"), feature(alloc))]
 
 #[cfg(any(test, feature = "alloc"))]
-extern crate collections;
+extern crate alloc;
 
 extern crate byteorder;
 
@@ -20,7 +20,7 @@ pub use parse::{parse, ParseError};
 pub use heap_tx_packet::HeapTxPacket;
 
 use core::ops::{Index, IndexMut, Range};
-use collections::borrow::Cow;
+use alloc::borrow::Cow;
 use byteorder::{ByteOrder, NetworkEndian};
 
 pub mod ethernet;
@@ -108,8 +108,8 @@ impl<'a> WriteOut for Cow<'a, [u8]> {
 #[cfg(any(test, feature = "alloc"))]
 mod heap_tx_packet {
     use core::ops::{Deref, Index, IndexMut, Range};
-    use collections::boxed::Box;
-    use collections::vec::Vec;
+    use alloc::boxed::Box;
+    use alloc::vec::Vec;
     use ethernet::EthernetPacket;
     use {WriteOut, TxPacket};
 
