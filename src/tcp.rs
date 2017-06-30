@@ -81,8 +81,8 @@ impl<'a> Parse<'a> for TcpPacket<&'a [u8]> {
     fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
         use bit_field::BitField;
 
-        let data_offset = data[12].get_bits(0..4);
-        let data_offset_bytes = usize::from(data_offset) * 4;
+        let header_len = data[12].get_bits(0..4);
+        let header_len_bytes = usize::from(header_len) * 4;
         Ok(TcpPacket {
                header: TcpHeader {
                    src_port: NetworkEndian::read_u16(&data[0..2]),
@@ -92,7 +92,7 @@ impl<'a> Parse<'a> for TcpPacket<&'a [u8]> {
                    options: TcpOptions::from_bytes(data[12], data[13]),
                    window_size: NetworkEndian::read_u16(&data[14..16]),
                },
-               payload: &data[data_offset_bytes..],
+               payload: &data[header_len_bytes..],
            })
     }
 }
