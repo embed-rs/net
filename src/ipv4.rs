@@ -183,6 +183,29 @@ impl<T: WriteOut> WriteOut for Ipv4Packet<UdpPacket<T>> {
     }
 }
 
+impl<T: WriteOut> WriteOut for Ipv4Packet<TcpPacket<T>> {
+    fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
+        self.write_out_impl(packet)?;
+
+        let tcp_start_index = packet.len();
+        self.payload.write_out(packet)?;
+
+        // calculate tcp checksum
+        let pseudo_header_checksum = !ip_checksum::pseudo_header(&self.header.src_addr,
+                                                                 &self.header.dst_addr,
+                                                                 self.header.protocol,
+                                                                 self.payload.len());
+
+        let tcp_checksum_idx = tcp_start_index + 16;
+        packet.update_u16(tcp_checksum_idx, |checksum| {
+            let checksums = [checksum, pseudo_header_checksum];
+            ip_checksum::combine(&checksums)
+        });
+
+        Ok(())
+    }
+}
+
 use parse::{Parse, ParseError};
 use udp::UdpKind;
 use tcp::TcpKind;
