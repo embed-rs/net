@@ -48,7 +48,7 @@ impl<T> TcpPacket<T> {
 
 impl<T: WriteOut> WriteOut for TcpPacket<T> {
     fn len(&self) -> usize {
-        self.payload.len() + 4 * 2
+        self.payload.len() + 6 * 2 + 2 * 4
     }
 
     fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
