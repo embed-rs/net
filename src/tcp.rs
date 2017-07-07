@@ -1,25 +1,9 @@
 use {TxPacket, WriteOut};
 use ip_checksum;
 use byteorder::{ByteOrder, NetworkEndian};
-use ethernet::{EthernetPacket, EthernetAddress};
-use ipv4::{Ipv4Packet, Ipv4Address};
+use ipv4::Ipv4Address;
 use alloc::borrow::Cow;
 use bit_field::BitField;
-
-pub fn new_tcp_packet<T>(src_mac: EthernetAddress,
-                         dst_mac: EthernetAddress,
-                         src_ip: Ipv4Address,
-                         dst_ip: Ipv4Address,
-                         src_port: u16,
-                         dst_port: u16,
-                         payload: T)
-                         -> EthernetPacket<Ipv4Packet<TcpPacket<T>>> {
-    EthernetPacket::new_ipv4(src_mac,
-                             dst_mac,
-                             Ipv4Packet::new_tcp(src_ip,
-                                                 dst_ip,
-                                                 TcpPacket::new(src_port, dst_port, payload)))
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TcpHeader {
@@ -35,15 +19,6 @@ pub struct TcpHeader {
 pub struct TcpPacket<T> {
     pub header: TcpHeader,
     pub payload: T,
-}
-
-impl<T> TcpPacket<T> {
-    pub fn new(src_port: u16, dst_port: u16, payload: T) -> Self {
-        TcpPacket {
-            header: TcpHeader { src_port, dst_port, sequence_number: 0, ack_number: 0, options: TcpOptions::new(), window_size:0 },
-            payload,
-        }
-    }
 }
 
 impl<T: WriteOut> WriteOut for TcpPacket<T> {
