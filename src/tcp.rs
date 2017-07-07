@@ -95,6 +95,9 @@ pub struct TcpConnection {
     src_port: u16,
     dst_port: u16,
     state: TcpState,
+    sequence_number: u32,
+    ack_number: u32,
+    window_size: u16,
 }
 
 impl TcpConnection {
@@ -104,7 +107,10 @@ impl TcpConnection {
             dst_ip: id.1,
             src_port: id.2,
             dst_port: id.3,
-            state: TcpState::Disconnected,
+            state: TcpState::Listen,
+            sequence_number: 0x12345, // TODO random
+            ack_number: 0,
+            window_size: 1000, // TODO
         }
     }
 
@@ -114,36 +120,103 @@ impl TcpConnection {
         static EMPTY: [u8; 0] = [];
 
         match self.state {
-            TcpState::Disconnected | TcpState::SynAckSent if packet.header.options.syn() => {
+            TcpState::Closed => None,
+            TcpState::Listen | TcpState::SynReceived if packet.header.options.syn() => {
+                assert!(!packet.header.options.ack()); // TODO avoid panic
+                self.ack_number = packet.header.sequence_number.wrapping_add(1);
                 let header = TcpHeader {
                     src_port: self.dst_port,
                     dst_port: self.src_port,
-                    sequence_number: 42, // TODO random
-                    ack_number: packet.header.sequence_number.wrapping_add(1),
-                    window_size: 1000, // TODO
-                    options: TcpOptions::syn_ack(),
+                    sequence_number: self.sequence_number,
+                    ack_number: self.ack_number,
+                    window_size: self.window_size,
+                    options: TcpOptions::new_syn_ack(),
                 };
-                self.state = TcpState::SynAckSent;
+                self.state = TcpState::SynReceived;
+                self.sequence_number = self.sequence_number.wrapping_add(1);
                 Some(TcpPacket {
                     payload: Cow::from(&EMPTY[..]),
                     header: header,
                 })
             }
-            TcpState::SynAckSent if packet.header.options.ack() => {
-                self.state = TcpState::Connected;
+            TcpState::SynReceived if packet.header.options.ack() => {
+                self.state = TcpState::Established;
                 None
             }
-            TcpState::Connected => f(self, packet.payload).map(|d| TcpPacket::new(self.dst_port, self.src_port, d)),
+            TcpState::LastAck if packet.header.options.ack() => {
+                self.state = TcpState::Closed;
+                None
+            }
+            TcpState::Established if packet.header.options.fin() => {
+                let mut options = TcpOptions::new_ack();
+                options.set_fin(true);
+                let header = TcpHeader {
+                    src_port: self.dst_port,
+                    dst_port: self.src_port,
+                    sequence_number: self.sequence_number,
+                    ack_number: packet.header.sequence_number.wrapping_add(1),
+                    window_size: 1000, // TODO
+                    options,
+                };
+                self.state = TcpState::LastAck;
+                self.sequence_number = self.sequence_number.wrapping_add(1);
+                Some(TcpPacket {
+                    payload: Cow::from(&EMPTY[..]),
+                    header: header,
+                })
+            }
+            TcpState::Established => {
+                if packet.header.sequence_number == self.ack_number {
+                    self.ack_number += packet.payload.len() as u32;
+                } else if packet.header.sequence_number < self.ack_number {
+                    // old packet, do nothing
+                    return None;
+                } else {
+                    panic!("TCP packet out of order. Expected seq no: {}, received: {}", self.ack_number, packet.header.sequence_number);
+                }
+
+                if packet.header.options.ack() && packet.payload.len() == 0 {
+                    return None; // don't react to ACKs
+                }
+
+                let header = TcpHeader {
+                    src_port: self.dst_port,
+                    dst_port: self.src_port,
+                    sequence_number: self.sequence_number,
+                    ack_number: self.ack_number,
+                    window_size: self.window_size,
+                    options: TcpOptions::new_ack(),
+                };
+
+                let reply = f(self, packet.payload).map(|payload| TcpPacket {
+                        payload, header,
+                    });
+                if let Some(ref r) = reply {
+                    self.sequence_number = self.sequence_number.wrapping_add(r.payload.len() as u32);
+                }
+                Some(reply.unwrap_or(TcpPacket {header, payload: Cow::from(&EMPTY[..])}))
+            },
             _ => None, // TODO
         }
     }
 }
 
-#[derive(Debug)]
-enum TcpState {
-    Disconnected,
-    SynAckSent,
-    Connected
+
+/// The state of a TCP socket, according to [RFC 793][rfc793].
+/// [rfc793]: https://tools.ietf.org/html/rfc793
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum TcpState {
+    Closed,
+    Listen,
+    SynSent,
+    SynReceived,
+    Established,
+    FinWait1,
+    FinWait2,
+    CloseWait,
+    Closing,
+    LastAck,
+    TimeWait
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,7 +240,13 @@ impl TcpOptions {
         }
     }
 
-    pub fn syn_ack() -> Self {
+    pub fn new_ack() -> Self {
+        let mut options = Self::new();
+        options.set_ack(true);
+        options
+    }
+
+    pub fn new_syn_ack() -> Self {
         let mut options = Self::new();
         options.set_syn(true);
         options.set_ack(true);
@@ -220,5 +299,9 @@ impl TcpOptions {
 
     pub fn fin(&self) -> bool {
         self.flags.get_bit(0)
+    }
+
+    pub fn set_fin(&mut self, value: bool) {
+        self.flags.set_bit(0, value);
     }
 }
