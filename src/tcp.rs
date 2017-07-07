@@ -81,7 +81,7 @@ impl<'a> Parse<'a> for TcpPacket<&'a [u8]> {
     fn parse(data: &'a [u8]) -> Result<Self, ParseError> {
         use bit_field::BitField;
 
-        let header_len = data[12].get_bits(0..4);
+        let header_len = data[12].get_bits(4..8);
         let header_len_bytes = usize::from(header_len) * 4;
         Ok(TcpPacket {
                header: TcpHeader {
