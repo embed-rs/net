@@ -4,13 +4,14 @@ use byteorder::{ByteOrder, NetworkEndian};
 use ipv4::Ipv4Address;
 use alloc::borrow::Cow;
 use bit_field::BitField;
+use core::num::Wrapping;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TcpHeader {
     pub src_port: u16,
     pub dst_port: u16,
-    pub sequence_number: u32,
-    pub ack_number: u32,
+    pub sequence_number: Wrapping<u32>,
+    pub ack_number: Wrapping<u32>,
     pub options: TcpOptions,
     pub window_size: u16,
 }
@@ -31,8 +32,8 @@ impl<T: WriteOut> WriteOut for TcpPacket<T> {
 
         packet.push_u16(self.header.src_port)?;
         packet.push_u16(self.header.dst_port)?;
-        packet.push_u32(self.header.sequence_number)?;
-        packet.push_u32(self.header.ack_number)?;
+        packet.push_u32(self.header.sequence_number.0)?;
+        packet.push_u32(self.header.ack_number.0)?;
         packet.push_byte(self.header.options.header_len)?;
         packet.push_byte(self.header.options.flags)?;
         packet.push_u16(self.header.window_size)?;
@@ -62,8 +63,8 @@ impl<'a> Parse<'a> for TcpPacket<&'a [u8]> {
                header: TcpHeader {
                    src_port: NetworkEndian::read_u16(&data[0..2]),
                    dst_port: NetworkEndian::read_u16(&data[2..4]),
-                   sequence_number: NetworkEndian::read_u32(&data[4..8]),
-                   ack_number: NetworkEndian::read_u32(&data[8..12]),
+                   sequence_number: Wrapping(NetworkEndian::read_u32(&data[4..8])),
+                   ack_number: Wrapping(NetworkEndian::read_u32(&data[8..12])),
                    options: TcpOptions::from_bytes(data[12], data[13]),
                    window_size: NetworkEndian::read_u16(&data[14..16]),
                },
@@ -95,8 +96,8 @@ pub struct TcpConnection {
     src_port: u16,
     dst_port: u16,
     state: TcpState,
-    sequence_number: u32,
-    ack_number: u32,
+    sequence_number: Wrapping<u32>,
+    ack_number: Wrapping<u32>,
     window_size: u16,
 }
 
@@ -108,8 +109,8 @@ impl TcpConnection {
             src_port: id.2,
             dst_port: id.3,
             state: TcpState::Listen,
-            sequence_number: 0x12345, // TODO random
-            ack_number: 0,
+            sequence_number: Wrapping(0x12345), // TODO random
+            ack_number: Wrapping(0),
             window_size: 1000, // TODO
         }
     }
@@ -123,7 +124,7 @@ impl TcpConnection {
             TcpState::Closed => None,
             TcpState::Listen | TcpState::SynReceived if packet.header.options.syn() => {
                 assert!(!packet.header.options.ack()); // TODO avoid panic
-                self.ack_number = packet.header.sequence_number.wrapping_add(1);
+                self.ack_number = packet.header.sequence_number + Wrapping(1);
                 let header = TcpHeader {
                     src_port: self.dst_port,
                     dst_port: self.src_port,
@@ -133,7 +134,7 @@ impl TcpConnection {
                     options: TcpOptions::new_syn_ack(),
                 };
                 self.state = TcpState::SynReceived;
-                self.sequence_number = self.sequence_number.wrapping_add(1);
+                self.sequence_number += Wrapping(1);
                 Some(TcpPacket {
                     payload: Cow::from(&EMPTY[..]),
                     header: header,
@@ -154,12 +155,12 @@ impl TcpConnection {
                     src_port: self.dst_port,
                     dst_port: self.src_port,
                     sequence_number: self.sequence_number,
-                    ack_number: packet.header.sequence_number.wrapping_add(1),
+                    ack_number: packet.header.sequence_number + Wrapping(1),
                     window_size: 1000, // TODO
                     options,
                 };
                 self.state = TcpState::LastAck;
-                self.sequence_number = self.sequence_number.wrapping_add(1);
+                self.sequence_number += Wrapping(1);
                 Some(TcpPacket {
                     payload: Cow::from(&EMPTY[..]),
                     header: header,
@@ -167,7 +168,7 @@ impl TcpConnection {
             }
             TcpState::Established => {
                 if packet.header.sequence_number == self.ack_number {
-                    self.ack_number += packet.payload.len() as u32;
+                    self.ack_number += Wrapping(packet.payload.len() as u32);
                 } else if packet.header.sequence_number < self.ack_number {
                     // old packet, do nothing
                     return None;
@@ -192,7 +193,7 @@ impl TcpConnection {
                         payload, header,
                     });
                 if let Some(ref r) = reply {
-                    self.sequence_number = self.sequence_number.wrapping_add(r.payload.len() as u32);
+                    self.sequence_number += Wrapping(r.payload.len() as u32);
                 }
                 Some(reply.unwrap_or(TcpPacket {header, payload: Cow::from(&EMPTY[..])}))
             },
