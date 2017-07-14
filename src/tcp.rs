@@ -132,13 +132,13 @@ impl TcpConnection {
                     options: TcpOptions::new(TcpFlags::SYN | TcpFlags::ACK),
                 };
                 self.state = TcpState::SynReceived;
-                self.sequence_number += Wrapping(1);
                 Some(TcpPacket {
                     payload: Cow::from(&EMPTY[..]),
                     header: header,
                 })
             }
             TcpState::SynReceived if packet.header.options.flags == TcpFlags::ACK => {
+                self.sequence_number += Wrapping(1);
                 self.state = TcpState::Established;
                 None
             }
