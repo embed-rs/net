@@ -34,8 +34,7 @@ impl<T: WriteOut> WriteOut for TcpPacket<T> {
         packet.push_u16(self.header.dst_port)?;
         packet.push_u32(self.header.sequence_number.0)?;
         packet.push_u32(self.header.ack_number.0)?;
-        packet.push_byte(self.header.options.header_len)?;
-        packet.push_byte(self.header.options.flags)?;
+        packet.push_u16(self.header.options.bits())?;
         packet.push_u16(self.header.window_size)?;
         let checksum_idx = packet.push_u16(0)?; // checksum
         packet.push_u16(0)?; // urgent pointer
@@ -65,7 +64,7 @@ impl<'a> Parse<'a> for TcpPacket<&'a [u8]> {
                    dst_port: NetworkEndian::read_u16(&data[2..4]),
                    sequence_number: Wrapping(NetworkEndian::read_u32(&data[4..8])),
                    ack_number: Wrapping(NetworkEndian::read_u32(&data[8..12])),
-                   options: TcpOptions::from_bytes(data[12], data[13]),
+                   options: TcpOptions::from_bits(NetworkEndian::read_u16(&data[12..14])),
                    window_size: NetworkEndian::read_u16(&data[14..16]),
                },
                payload: &data[header_len_bytes..],
@@ -122,7 +121,7 @@ impl TcpConnection {
 
         match self.state {
             TcpState::Closed => None,
-            TcpState::Listen | TcpState::SynReceived if packet.header.options.syn() => {
+            TcpState::Listen | TcpState::SynReceived if packet.header.options.flags.contains(TcpFlags::SYN) => {
                 assert!(!packet.header.options.ack()); // TODO avoid panic
                 self.ack_number = packet.header.sequence_number + Wrapping(1);
                 let header = TcpHeader {
@@ -131,7 +130,7 @@ impl TcpConnection {
                     sequence_number: self.sequence_number,
                     ack_number: self.ack_number,
                     window_size: self.window_size,
-                    options: TcpOptions::new_syn_ack(),
+                    options: TcpOptions::new(TcpFlags::SYN | TcpFlags::ACK),
                 };
                 self.state = TcpState::SynReceived;
                 self.sequence_number += Wrapping(1);
@@ -140,17 +139,16 @@ impl TcpConnection {
                     header: header,
                 })
             }
-            TcpState::SynReceived if packet.header.options.ack() => {
+            TcpState::SynReceived if packet.header.options.flags.contains(TcpFlags::ACK) => {
                 self.state = TcpState::Established;
                 None
             }
-            TcpState::LastAck if packet.header.options.ack() => {
+            TcpState::LastAck if packet.header.options.flags.contains(TcpFlags::ACK) => {
                 self.state = TcpState::Closed;
                 None
             }
-            TcpState::Established if packet.header.options.fin() => {
-                let mut options = TcpOptions::new_ack();
-                options.set_fin(true);
+            TcpState::Established if packet.header.options.flags.contains(TcpFlags::Fin) => {
+                let options = TcpOptions::new(TcpFlags::Ack | TcpFlags::Fin);
                 let header = TcpHeader {
                     src_port: self.dst_port,
                     dst_port: self.src_port,
@@ -176,7 +174,7 @@ impl TcpConnection {
                     panic!("TCP packet out of order. Expected seq no: {}, received: {}", self.ack_number, packet.header.sequence_number);
                 }
 
-                if packet.header.options.ack() && packet.payload.len() == 0 {
+                if packet.header.options.flags.contains(TcpFlags::ACK) && packet.payload.len() == 0 {
                     return None; // don't react to ACKs
                 }
 
@@ -186,7 +184,7 @@ impl TcpConnection {
                     sequence_number: self.sequence_number,
                     ack_number: self.ack_number,
                     window_size: self.window_size,
-                    options: TcpOptions::new_ack(),
+                    options: TcpOptions::new(TcpFlags::ACK),
                 };
 
                 let reply = f(self, packet.payload).map(|payload| TcpPacket {
@@ -222,87 +220,40 @@ pub enum TcpState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TcpOptions {
-    header_len: u8,
-    flags: u8
+    header_len: u16,
+    flags: TcpFlags,
 }
 
 impl TcpOptions {
-    pub fn new() -> Self {
+    pub fn new(flags: TcpFlags) -> Self {
         TcpOptions {
-            header_len: 5 << 4,
-            flags: 0,
+            header_len: 5,
+            flags: flags,
         }
     }
 
-    pub fn from_bytes(header_len: u8, flags: u8) -> Self {
+    pub fn from_bits(bits: u16) -> Self {
         TcpOptions {
-            header_len,
-            flags,
+            header_len: bits.get_bits(12..16), // TODO
+            flags: TcpFlags::from_bits_truncate(bits),
         }
     }
 
-    pub fn new_ack() -> Self {
-        let mut options = Self::new();
-        options.set_ack(true);
-        options
+    pub fn bits(&self) -> u16 {
+        self.flags.bits() | (self.header_len << 12) // TODO
     }
+}
 
-    pub fn new_syn_ack() -> Self {
-        let mut options = Self::new();
-        options.set_syn(true);
-        options.set_ack(true);
-        options
-    }
-
-    pub fn header_len(&self) -> u8 {
-        self.header_len.get_bits(4..8) as u8
-    }
-
-    pub fn ns(&self) -> bool {
-        self.header_len.get_bit(0)
-    }
-
-    pub fn cwr(&self) -> bool {
-        self.flags.get_bit(7)
-    }
-
-    pub fn ece(&self) -> bool {
-        self.flags.get_bit(6)
-    }
-
-    pub fn urg(&self) -> bool {
-        self.flags.get_bit(5)
-    }
-
-    pub fn ack(&self) -> bool {
-        self.flags.get_bit(4)
-    }
-
-    pub fn set_ack(&mut self, value: bool) {
-        self.flags.set_bit(4, value);
-    }
-
-    pub fn psh(&self) -> bool {
-        self.flags.get_bit(3)
-    }
-
-    pub fn rst(&self) -> bool {
-        self.flags.get_bit(2)
-    }
-
-    pub fn syn(&self) -> bool {
-        self.flags.get_bit(1)
-    }
-
-    pub fn set_syn(&mut self, value: bool) {
-        self.flags.set_bit(1, value);
-    }
-
-    pub fn fin(&self) -> bool {
-        self.flags.get_bit(0)
-    }
-
-    pub fn set_fin(&mut self, value: bool) {
-        self.flags.set_bit(0, value);
+bitflags! {
+    pub struct TcpFlags: u16 {
+        const NS = 1 << 8;
+        const CWR = 1 << 7;
+        const ECE = 1 << 6;
+        const URG = 1 << 5;
+        const ACK = 1 << 4;
+        const PSH = 1 << 3;
+        const RST = 1 << 2;
+        const SYN = 1 << 1;
+        const FIN = 1 << 0;
     }
 }
