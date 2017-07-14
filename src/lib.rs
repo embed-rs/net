@@ -24,6 +24,9 @@ use core::ops::{Index, IndexMut, Range};
 use alloc::borrow::Cow;
 use byteorder::{ByteOrder, NetworkEndian};
 
+#[macro_use]
+mod bitflags;
+
 pub mod ethernet;
 pub mod arp;
 pub mod ipv4;
