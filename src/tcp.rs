@@ -121,8 +121,7 @@ impl TcpConnection {
 
         match self.state {
             TcpState::Closed => None,
-            TcpState::Listen | TcpState::SynReceived if packet.header.options.flags.contains(TcpFlags::SYN) => {
-                assert!(!packet.header.options.ack()); // TODO avoid panic
+            TcpState::Listen | TcpState::SynReceived if packet.header.options.flags == TcpFlags::SYN => {
                 self.ack_number = packet.header.sequence_number + Wrapping(1);
                 let header = TcpHeader {
                     src_port: self.dst_port,
@@ -139,11 +138,11 @@ impl TcpConnection {
                     header: header,
                 })
             }
-            TcpState::SynReceived if packet.header.options.flags.contains(TcpFlags::ACK) => {
+            TcpState::SynReceived if packet.header.options.flags == TcpFlags::ACK => {
                 self.state = TcpState::Established;
                 None
             }
-            TcpState::LastAck if packet.header.options.flags.contains(TcpFlags::ACK) => {
+            TcpState::LastAck if packet.header.options.flags == TcpFlags::ACK => {
                 self.state = TcpState::Closed;
                 None
             }
@@ -174,7 +173,7 @@ impl TcpConnection {
                     panic!("TCP packet out of order. Expected seq no: {}, received: {}", self.ack_number, packet.header.sequence_number);
                 }
 
-                if packet.header.options.flags.contains(TcpFlags::ACK) && packet.payload.len() == 0 {
+                if packet.header.options.flags == TcpFlags::ACK && packet.payload.len() == 0 {
                     return None; // don't react to ACKs
                 }
 
