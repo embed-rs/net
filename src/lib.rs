@@ -90,6 +90,16 @@ pub trait WriteOut {
     fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()>;
 }
 
+impl<'a> WriteOut for () {
+    fn len(&self) -> usize {
+        0
+    }
+
+    fn write_out<T: TxPacket>(&self, _packet: &mut T) -> Result<(), ()> {
+        Ok(())
+    }
+}
+
 impl<'a> WriteOut for &'a [u8] {
     fn len(&self) -> usize {
         <[u8]>::len(self)
