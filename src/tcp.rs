@@ -146,23 +146,6 @@ impl TcpConnection {
                 self.state = TcpState::Closed;
                 None
             }
-            TcpState::Established if packet.header.options.flags.contains(TcpFlags::Fin) => {
-                let options = TcpOptions::new(TcpFlags::Ack | TcpFlags::Fin);
-                let header = TcpHeader {
-                    src_port: self.dst_port,
-                    dst_port: self.src_port,
-                    sequence_number: self.sequence_number,
-                    ack_number: packet.header.sequence_number + Wrapping(1),
-                    window_size: 1000, // TODO
-                    options,
-                };
-                self.state = TcpState::LastAck;
-                self.sequence_number += Wrapping(1);
-                Some(TcpPacket {
-                    payload: Cow::from(&EMPTY[..]),
-                    header: header,
-                })
-            }
             TcpState::Established => {
                 if packet.header.sequence_number == self.ack_number {
                     self.ack_number += Wrapping(packet.payload.len() as u32);
@@ -175,6 +158,25 @@ impl TcpConnection {
 
                 if packet.header.options.flags == TcpFlags::ACK && packet.payload.len() == 0 {
                     return None; // don't react to ACKs
+                }
+
+                if packet.header.options.flags.contains(TcpFlags::FIN) {
+                    let options = TcpOptions::new(TcpFlags::ACK | TcpFlags::FIN);
+                    self.ack_number += Wrapping(1);
+                    let header = TcpHeader {
+                        src_port: self.dst_port,
+                        dst_port: self.src_port,
+                        sequence_number: self.sequence_number,
+                        ack_number: self.ack_number,
+                        window_size: 1000, // TODO
+                        options,
+                    };
+                    self.state = TcpState::LastAck;
+                    self.sequence_number += Wrapping(1);
+                    return Some(TcpPacket {
+                        payload: Cow::from(&EMPTY[..]),
+                        header: header,
+                    });
                 }
 
                 let header = TcpHeader {
