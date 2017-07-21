@@ -2,9 +2,11 @@ use {TxPacket, WriteOut};
 use ip_checksum;
 use byteorder::{ByteOrder, NetworkEndian};
 use ipv4::Ipv4Address;
-use alloc::borrow::Cow;
 use bit_field::BitField;
 use core::num::Wrapping;
+use alloc::borrow::Cow;
+use alloc::boxed::Box;
+use alloc::{Vec, BTreeMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TcpHeader {
@@ -98,6 +100,7 @@ pub struct TcpConnection {
     sequence_number: Wrapping<u32>,
     ack_number: Wrapping<u32>,
     window_size: u16,
+    packet_queue: BTreeMap<Wrapping<u32>, TcpPacket<Box<[u8]>>>,
 }
 
 impl TcpConnection {
@@ -111,15 +114,16 @@ impl TcpConnection {
             sequence_number: Wrapping(0x12345), // TODO random
             ack_number: Wrapping(0),
             window_size: 1000, // TODO
+            packet_queue: BTreeMap::new(),
         }
     }
 
-    pub fn handle_packet<'a, F>(&mut self, packet: &'a TcpPacket<&[u8]>, mut f: F) -> Option<TcpPacket<Cow<'a, [u8]>>>
+    pub fn handle_packet<'a, F>(&mut self, packet: &'a TcpPacket<&[u8]>, mut f: F)
         where for<'d> F: FnMut(&TcpConnection, &'d [u8]) -> Option<Cow<'d, [u8]>>
     {
-        static EMPTY: [u8; 0] = [];
+        let empty = Vec::new().into_boxed_slice();
 
-        match self.state {
+        let reply = match self.state {
             TcpState::Closed => None,
             TcpState::Listen | TcpState::SynReceived if packet.header.options.flags == TcpFlags::SYN => {
                 self.ack_number = packet.header.sequence_number + Wrapping(1);
@@ -133,7 +137,7 @@ impl TcpConnection {
                 };
                 self.state = TcpState::SynReceived;
                 Some(TcpPacket {
-                    payload: Cow::from(&EMPTY[..]),
+                    payload: Box::from(empty),
                     header: header,
                 })
             }
@@ -151,13 +155,13 @@ impl TcpConnection {
                     self.ack_number += Wrapping(packet.payload.len() as u32);
                 } else if packet.header.sequence_number < self.ack_number {
                     // old packet, do nothing
-                    return None;
+                    return;
                 } else {
                     panic!("TCP packet out of order. Expected seq no: {}, received: {}", self.ack_number, packet.header.sequence_number);
                 }
 
                 if packet.header.options.flags == TcpFlags::ACK && packet.payload.len() == 0 {
-                    return None; // don't react to ACKs
+                    return; // don't react to ACKs
                 }
 
                 if packet.header.options.flags.contains(TcpFlags::FIN) {
@@ -173,34 +177,41 @@ impl TcpConnection {
                     };
                     self.state = TcpState::LastAck;
                     self.sequence_number += Wrapping(1);
-                    return Some(TcpPacket {
-                        payload: Cow::from(&EMPTY[..]),
+                    Some(TcpPacket {
+                        payload: empty,
                         header: header,
-                    });
-                }
+                    })
+                } else {
+                    let header = TcpHeader {
+                        src_port: self.dst_port,
+                        dst_port: self.src_port,
+                        sequence_number: self.sequence_number,
+                        ack_number: self.ack_number,
+                        window_size: self.window_size,
+                        options: TcpOptions::new(TcpFlags::ACK),
+                    };
 
-                let header = TcpHeader {
-                    src_port: self.dst_port,
-                    dst_port: self.src_port,
-                    sequence_number: self.sequence_number,
-                    ack_number: self.ack_number,
-                    window_size: self.window_size,
-                    options: TcpOptions::new(TcpFlags::ACK),
-                };
-
-                let reply = f(self, packet.payload).map(|payload| TcpPacket {
-                        payload, header,
-                    });
-                if let Some(ref r) = reply {
-                    self.sequence_number += Wrapping(r.payload.len() as u32);
+                    let reply = f(self, packet.payload).map(|payload| TcpPacket {
+                            header, payload: payload.into_owned().into_boxed_slice(),
+                        });
+                    if let Some(ref r) = reply {
+                        self.sequence_number += Wrapping(r.payload.len() as u32);
+                    }
+                    Some(reply.unwrap_or(TcpPacket { header, payload: empty }))
                 }
-                Some(reply.unwrap_or(TcpPacket {header, payload: Cow::from(&EMPTY[..])}))
             },
             _ => None, // TODO
+        };
+
+        if let Some(reply) = reply {
+            self.packet_queue.insert(reply.header.sequence_number, reply);
         }
     }
-}
 
+    pub fn packets<'a>(&'a mut self) -> impl Iterator<Item = &TcpPacket<Box<[u8]>>> {
+        self.packet_queue.values()
+    }
+}
 
 /// The state of a TCP socket, according to [RFC 793][rfc793].
 /// [rfc793]: https://tools.ietf.org/html/rfc793

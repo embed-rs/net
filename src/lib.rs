@@ -1,6 +1,7 @@
 #![feature(try_from)]
 #![feature(specialization)]
 #![feature(const_fn)]
+#![feature(conservative_impl_trait)]
 
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(any(test, feature = "alloc"), feature(alloc))]
