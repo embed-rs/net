@@ -160,8 +160,8 @@ impl TcpConnection {
                     panic!("TCP packet out of order. Expected seq no: {}, received: {}", self.ack_number, packet.header.sequence_number);
                 }
 
-                if packet.header.options.flags == TcpFlags::ACK && packet.payload.len() == 0 {
-                    return; // don't react to ACKs
+                if packet.header.options.flags == TcpFlags::ACK {
+                    self.packet_queue = self.packet_queue.split_off(&packet.header.ack_number); // TODO: efficient?
                 }
 
                 if packet.header.options.flags.contains(TcpFlags::FIN) {
@@ -181,6 +181,8 @@ impl TcpConnection {
                         payload: empty,
                         header: header,
                     })
+                } else if packet.payload.len() == 0 {
+                    None
                 } else {
                     let header = TcpHeader {
                         src_port: self.dst_port,
