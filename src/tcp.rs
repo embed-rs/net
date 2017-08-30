@@ -24,7 +24,7 @@ pub struct TcpPacket<T> {
     pub payload: T,
 }
 
-impl<T: WriteOut> WriteOut for TcpPacket<T> {
+impl<'a, T: WriteOut> WriteOut for &'a TcpPacket<T> {
     fn len(&self) -> usize {
         self.payload.len() + 6 * 2 + 2 * 4
     }

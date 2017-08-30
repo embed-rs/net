@@ -88,8 +88,8 @@ impl<T> Ipv4Packet<UdpPacket<T>> {
     }
 }
 
-impl<T> Ipv4Packet<TcpPacket<T>> {
-    pub fn new_tcp(src_addr: Ipv4Address, dst_addr: Ipv4Address, tcp: TcpPacket<T>) -> Self {
+impl<'a, T> Ipv4Packet<&'a TcpPacket<T>> {
+    pub fn new_tcp(src_addr: Ipv4Address, dst_addr: Ipv4Address, tcp: &'a TcpPacket<T>) -> Self {
         Ipv4Packet {
             header: Ipv4Header {
                 src_addr: src_addr,
@@ -183,7 +183,7 @@ impl<T: WriteOut> WriteOut for Ipv4Packet<UdpPacket<T>> {
     }
 }
 
-impl<T: WriteOut> WriteOut for Ipv4Packet<TcpPacket<T>> {
+impl<'a, T: WriteOut> WriteOut for Ipv4Packet<&'a TcpPacket<T>> {
     fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
         self.write_out_impl(packet)?;
 
