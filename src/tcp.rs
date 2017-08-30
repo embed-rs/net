@@ -148,6 +148,7 @@ impl TcpConnection {
             }
             TcpState::LastAck if packet.header.options.flags == TcpFlags::ACK => {
                 self.state = TcpState::Closed;
+                self.packet_queue.clear(); // TODO remaining packets?
                 None
             }
             TcpState::Established => {
