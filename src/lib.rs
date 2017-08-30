@@ -22,7 +22,7 @@ pub use parse::{parse, ParseError};
 pub use heap_tx_packet::HeapTxPacket;
 
 use core::ops::{Index, IndexMut, Range};
-use alloc::borrow::Cow;
+use core::borrow::Borrow;
 use byteorder::{ByteOrder, NetworkEndian};
 
 #[macro_use]
@@ -91,33 +91,13 @@ pub trait WriteOut {
     fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()>;
 }
 
-impl<'a> WriteOut for () {
+impl<T> WriteOut for T where T: Borrow<[u8]> {
     fn len(&self) -> usize {
-        0
+        <[u8]>::len(self.borrow())
     }
 
-    fn write_out<T: TxPacket>(&self, _packet: &mut T) -> Result<(), ()> {
-        Ok(())
-    }
-}
-
-impl<'a> WriteOut for &'a [u8] {
-    fn len(&self) -> usize {
-        <[u8]>::len(self)
-    }
-
-    fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()> {
-        packet.push_bytes(self).map(|_| ())
-    }
-}
-
-impl<'a> WriteOut for Cow<'a, [u8]> {
-    fn len(&self) -> usize {
-        (**self).len()
-    }
-
-    fn write_out<T: TxPacket>(&self, packet: &mut T) -> Result<(), ()> {
-        packet.push_bytes(self).map(|_| ())
+    fn write_out<P: TxPacket>(&self, packet: &mut P) -> Result<(), ()> {
+        packet.push_bytes(self.borrow()).map(|_| ())
     }
 }
 
