@@ -260,15 +260,15 @@ impl TcpOptions {
 }
 
 bitflags! {
-    pub struct TcpFlags: u16 {
-        const NS = 1 << 8;
-        const CWR = 1 << 7;
-        const ECE = 1 << 6;
-        const URG = 1 << 5;
-        const ACK = 1 << 4;
-        const PSH = 1 << 3;
-        const RST = 1 << 2;
-        const SYN = 1 << 1;
-        const FIN = 1 << 0;
+    pub flags TcpFlags: u16 {
+        const NS = 1 << 8,
+        const CWR = 1 << 7,
+        const ECE = 1 << 6,
+        const URG = 1 << 5,
+        const ACK = 1 << 4,
+        const PSH = 1 << 3,
+        const RST = 1 << 2,
+        const SYN = 1 << 1,
+        const FIN = 1 << 0,
     }
 }

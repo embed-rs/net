@@ -26,7 +26,7 @@ use core::borrow::Borrow;
 use byteorder::{ByteOrder, NetworkEndian};
 
 #[macro_use]
-mod bitflags;
+extern crate bitflags_associated_constants;
 
 pub mod ethernet;
 pub mod arp;
