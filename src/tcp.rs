@@ -211,7 +211,7 @@ impl TcpConnection {
         }
     }
 
-    pub fn packets<'a>(&'a mut self) -> impl Iterator<Item = &TcpPacket<Box<[u8]>>> {
+    pub fn packets<'a>(&'a mut self) -> impl Iterator<Item = &'a TcpPacket<Box<[u8]>>> {
         self.packet_queue.values()
     }
 }
